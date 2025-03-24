@@ -37,9 +37,169 @@ function runCommand(command, errorMessage) {
   }
 }
 
-// Main function
-async function main() {
-  console.log('\n1. Checking environment...');
+// CORS and connectivity fixes
+async function fixCorsConfiguration() {
+  console.log('⚙️ Applying CORS configuration fixes...');
+
+  // Fix backend CORS settings
+  try {
+    const backendEnvPath = path.join(__dirname, 'backend', '.env');
+    let envContent = '';
+    
+    // Check if .env exists, otherwise create it
+    if (fs.existsSync(backendEnvPath)) {
+      envContent = fs.readFileSync(backendEnvPath, 'utf8');
+      if (envContent.includes('CORS_ORIGIN=')) {
+        envContent = envContent.replace(/CORS_ORIGIN=.*/, 'CORS_ORIGIN=*');
+      } else {
+        envContent += '\nCORS_ORIGIN=*';
+      }
+    } else {
+      envContent = 'CORS_ORIGIN=*';
+    }
+    
+    fs.writeFileSync(backendEnvPath, envContent);
+    console.log('✅ Backend .env updated with CORS settings');
+
+    // Create CORS middleware file
+    const corsMiddlewarePath = path.join(__dirname, 'backend', 'src', 'cors-middleware.js');
+    const corsMiddlewareContent = `
+const setupCors = (app) => {
+  app.use((req, res, next) => {
+    // Allow all origins for GitHub Codespaces
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+};
+
+module.exports = setupCors;
+`;
+    fs.writeFileSync(corsMiddlewarePath, corsMiddlewareContent);
+    console.log('✅ Created CORS middleware file');
+    
+    // Update frontend setupProxy.js
+    const setupProxyPath = path.join(__dirname, 'frontend', 'src', 'setupProxy.js');
+    const setupProxyContent = `
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+module.exports = function(app) {
+  // Determine the backend URL based on the environment
+  const getBackendUrl = () => {
+    const hostname = process.env.HOSTNAME || '';
+    
+    // Check if running in GitHub Codespaces
+    if (hostname.includes('github.dev') || hostname.includes('app.github.dev')) {
+      // Extract the codespace name from the hostname
+      const codespaceNameMatch = hostname.match(/(.*?)-\\d+/);
+      const codespaceName = codespaceNameMatch ? codespaceNameMatch[1] : '';
+      
+      // Construct the backend URL for GitHub Codespaces
+      return \`https://\${codespaceName}-5000.app.github.dev\`;
+    }
+    
+    // Default to localhost for development
+    return 'http://localhost:5000';
+  };
+
+  const backendUrl = getBackendUrl();
+  console.log(\`Proxying API requests to: \${backendUrl}\`);
+
+  // Configure proxy for API requests
+  app.use(
+    '/api',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false, // Ignore SSL certificate errors
+      pathRewrite: { '^/api': '/api' },
+      logLevel: 'debug'
+    })
+  );
+
+  // Also proxy debug endpoints
+  app.use(
+    '/debug',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false,
+      logLevel: 'debug'
+    })
+  );
+
+  // Proxy for health check
+  app.use(
+    '/health',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true, 
+      secure: false
+    })
+  );
+};
+`;
+    
+    // Ensure directory exists
+    if (!fs.existsSync(path.join(__dirname, 'frontend', 'src'))) {
+      fs.mkdirSync(path.join(__dirname, 'frontend', 'src'), { recursive: true });
+    }
+    
+    fs.writeFileSync(setupProxyPath, setupProxyContent);
+    console.log('✅ Created frontend proxy configuration');
+    
+    // Update frontend CSP in index.html
+    const indexHtmlPath = path.join(__dirname, 'frontend', 'public', 'index.html');
+    if (fs.existsSync(indexHtmlPath)) {
+      let indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+      // Remove any existing CSP tags
+      indexHtml = indexHtml.replace(/<meta http-equiv="Content-Security-Policy".*?>/g, '');
+      
+      // Add permissive CSP tag
+      const cspTag = '<meta http-equiv="Content-Security-Policy" content="default-src * self blob: data: gap:; style-src * self \'unsafe-inline\' blob: data: gap:; script-src * \'unsafe-eval\' \'unsafe-inline\' blob: data: gap:; object-src * \'unsafe-inline\' blob: data: gap:; img-src * self \'unsafe-inline\' blob: data: gap:; connect-src self * \'unsafe-inline\' blob: data: gap:; frame-src * self blob: data: gap:;">';
+      
+      // Add CSP after the charset meta tag
+      indexHtml = indexHtml.replace(/<meta charset=".*?">/i, '$&\n    ' + cspTag);
+      
+      fs.writeFileSync(indexHtmlPath, indexHtml);
+      console.log('✅ Updated frontend CSP in index.html');
+    }
+    
+    // Add http-proxy-middleware to frontend dependencies
+    const frontendPackagePath = path.join(__dirname, 'frontend', 'package.json');
+    if (fs.existsSync(frontendPackagePath)) {
+      const packageJson = JSON.parse(fs.readFileSync(frontendPackagePath, 'utf8'));
+      
+      // Add http-proxy-middleware to devDependencies if it doesn't exist
+      if (!packageJson.devDependencies) {
+        packageJson.devDependencies = {};
+      }
+      
+      if (!packageJson.devDependencies['http-proxy-middleware']) {
+        packageJson.devDependencies['http-proxy-middleware'] = '^2.0.6';
+      }
+      
+      fs.writeFileSync(frontendPackagePath, JSON.stringify(packageJson, null, 2));
+      console.log('✅ Added http-proxy-middleware to frontend package.json');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Error applying CORS fixes:', error);
+    return false;
+  }
+}
+
+// Create necessary directories
+async function createDirectories() {
+  console.log('Creating necessary directories...');
   
   // Ensure backend database directory exists
   if (!fs.existsSync('./backend/database')) {
@@ -52,6 +212,28 @@ async function main() {
     console.log('Creating public directory for static files...');
     fs.mkdirSync('./backend/public', { recursive: true });
   }
+  
+  return true;
+}
+
+// Initialize the database
+async function initializeDatabase() {
+  console.log('\n2. Initializing database...');
+  
+  try {
+    console.log('Running database initialization script...');
+    runCommand('cd backend && node src/debug.js', 'Failed to initialize database');
+    console.log('✅ Database initialized successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ Database initialization failed, but continuing with fixes...', error);
+    return false;
+  }
+}
+
+// Create static files (logo files)
+async function createStaticFiles() {
+  console.log('\n3. Creating static files...');
   
   // Create simple logo files if they don't exist
   const createLogoFile = (size) => {
@@ -74,40 +256,95 @@ async function main() {
   createLogoFile(192);
   createLogoFile(512);
   
-  console.log('\n2. Installing required dependencies...');
-  runCommand('cd backend && npm install', 'Failed to install backend dependencies');
-  
-  console.log('\n3. Running database initialization...');
-  try {
-    runCommand('cd backend && node src/debug.js', 'Failed to initialize database');
-  } catch (error) {
-    console.error('Database initialization failed, but continuing with fixes...');
+  // Also create favicon.ico if it doesn't exist
+  const faviconPath = './backend/public/favicon.ico';
+  if (!fs.existsSync(faviconPath)) {
+    console.log('Creating placeholder favicon.ico...');
+    // Simple 16x16 ICO file
+    const minimalIco = Buffer.from([
+      0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00,
+      0x20, 0x00, 0x68, 0x04, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00,
+      0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x01, 0x00,
+      0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00
+    ]);
+    fs.writeFileSync(faviconPath, minimalIco);
   }
   
-  console.log('\n4. Starting the backend server...');
-  console.log('The backend server will start in a new terminal window.');
-  console.log('Please use Ctrl+C in that window to stop the server when done testing.');
+  console.log('✅ Static files created successfully');
+  return true;
+}
+
+// Update environment file
+async function updateEnvFile() {
+  console.log('\n4. Updating environment configuration...');
   
-  // Start the backend server in a new process
-  const isWindows = process.platform === 'win32';
-  if (isWindows) {
-    runCommand('start cmd /k "cd backend && npm start"', 'Failed to start backend server');
-  } else {
-    runCommand('cd backend && npm start &', 'Failed to start backend server');
+  const envPath = './backend/.env';
+  let envContent = '';
+  
+  if (fs.existsSync(envPath)) {
+    envContent = fs.readFileSync(envPath, 'utf8');
   }
   
-  console.log('\n5. Testing backend connection...');
-  setTimeout(() => {
-    console.log('Waiting for server to start...');
-    runCommand('curl http://localhost:5000/health', 'Failed to connect to backend server');
-    
-    console.log('\nDatabase fix complete!');
-    console.log('\nNext steps:');
-    console.log('1. Verify the backend is running at http://localhost:5000/health');
-    console.log('2. Use the API test utility at http://localhost:3000/api-test.html');
-    console.log('3. Enable authentication bypass by clicking "Enable Auth Bypass" on the API test page');
-    console.log('4. Go to the dashboard with bypass by clicking "Go to Dashboard with Bypass"');
-  }, 5000);
+  // Add or update essential environment variables
+  const envVars = {
+    PORT: 5000,
+    NODE_ENV: 'development',
+    JWT_SECRET: 'development-secret-key',
+    CORS_ORIGIN: '*'
+  };
+  
+  // Update each environment variable
+  Object.entries(envVars).forEach(([key, value]) => {
+    const regex = new RegExp(`${key}=.*`, 'g');
+    if (envContent.match(regex)) {
+      envContent = envContent.replace(regex, `${key}=${value}`);
+    } else {
+      envContent += `\n${key}=${value}`;
+    }
+  });
+  
+  // Write the updated .env file
+  fs.writeFileSync(envPath, envContent.trim());
+  
+  console.log('✅ Environment configuration updated');
+  return true;
+}
+
+// Main function
+async function main() {
+  console.log('\n📊 SmartSprint Database Troubleshooter\n');
+  
+  // Check if we're running in the root directory
+  if (!fs.existsSync('./backend') || !fs.existsSync('./frontend')) {
+    console.error('❌ This script must be run from the project root directory (where frontend and backend folders are located).');
+    return;
+  }
+  
+  // Fix potential CORS issues
+  await fixCorsConfiguration();
+  
+  console.log('\n1. Checking environment...');
+  
+  // Create backend directory if it doesn't exist
+  await createDirectories();
+  
+  // Initialize the database
+  await initializeDatabase();
+  
+  // Create static files (logo files)
+  await createStaticFiles();
+  
+  // Create or update .env file
+  await updateEnvFile();
+  
+  // Print next steps
+  console.log('\n🚀 Setup complete! Next steps:');
+  console.log('1. Start backend: cd backend && npm start');
+  console.log('2. In a new terminal, start frontend: cd frontend && npm start');
+  console.log('3. Visit http://localhost:3000 to use the application');
+  console.log('\n📝 If you encounter any issues, refer to the README.md troubleshooting section');
 }
 
 // Run main function

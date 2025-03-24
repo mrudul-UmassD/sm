@@ -505,6 +505,132 @@ EOF
   fi
 }
 
+# GitHub Codespaces specific fix
+fix_github_codespaces() {
+  echo "Applying GitHub Codespaces specific CORS fixes..."
+  
+  # Fix the frontend CORS and CSP issues
+  (cd frontend && {
+    # Update the index.html to remove any existing CSP meta tags and add a permissive one
+    sed -i '/<meta http-equiv="Content-Security-Policy"/d' public/index.html
+    sed -i '/<head>/a \  <meta http-equiv="Content-Security-Policy" content="default-src * self blob: data: gap:; style-src * self '\''unsafe-inline'\'' blob: data: gap:; script-src * '\''unsafe-eval'\'' '\''unsafe-inline'\'' blob: data: gap:; object-src * '\''unsafe-inline'\'' blob: data: gap:; img-src * self '\''unsafe-inline'\'' blob: data: gap:; connect-src self * '\''unsafe-inline'\'' blob: data: gap:; frame-src * self blob: data: gap:;">' public/index.html
+
+    # Create or update the setupProxy.js file
+    mkdir -p src
+    cat > src/setupProxy.js << 'EOF'
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+module.exports = function(app) {
+  // Determine the backend URL based on the environment
+  const getBackendUrl = () => {
+    const hostname = process.env.HOSTNAME || '';
+    
+    // Check if running in GitHub Codespaces
+    if (hostname.includes('github.dev') || hostname.includes('app.github.dev')) {
+      // Extract the codespace name from the hostname
+      const codespaceNameMatch = hostname.match(/(.*?)-\d+/);
+      const codespaceName = codespaceNameMatch ? codespaceNameMatch[1] : '';
+      
+      // Construct the backend URL for GitHub Codespaces
+      return `https://${codespaceName}-5000.app.github.dev`;
+    }
+    
+    // Default to localhost for development
+    return 'http://localhost:5000';
+  };
+
+  const backendUrl = getBackendUrl();
+  console.log(`Proxying API requests to: ${backendUrl}`);
+
+  // Configure proxy for API requests
+  app.use(
+    '/api',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false, // Ignore SSL certificate errors
+      pathRewrite: { '^/api': '/api' },
+      logLevel: 'debug'
+    })
+  );
+
+  // Also proxy debug endpoints
+  app.use(
+    '/debug',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false,
+      logLevel: 'debug'
+    })
+  );
+
+  // Proxy for health check
+  app.use(
+    '/health',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false
+    })
+  );
+};
+EOF
+
+    # Add http-proxy-middleware to package.json if not present
+    if ! grep -q "http-proxy-middleware" package.json; then
+      sed -i '/devDependencies/a \    "http-proxy-middleware": "^2.0.6",' package.json
+    fi
+
+    echo "Frontend CORS fixes applied."
+  })
+
+  # Fix the backend CORS configuration
+  (cd backend && {
+    # Ensure CORS_ORIGIN=* in .env
+    if [ -f .env ]; then
+      if grep -q "CORS_ORIGIN" .env; then
+        sed -i 's/CORS_ORIGIN=.*/CORS_ORIGIN=*/' .env
+      else
+        echo "CORS_ORIGIN=*" >> .env
+      fi
+    else
+      echo "CORS_ORIGIN=*" > .env
+    fi
+
+    # Update server.js to include comprehensive CORS handling
+    cat > src/cors-middleware.js << 'EOF'
+const setupCors = (app) => {
+  app.use((req, res, next) => {
+    // Allow all origins for GitHub Codespaces
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+};
+
+module.exports = setupCors;
+EOF
+
+    # Inject the cors-middleware.js into server.js if not already there
+    if ! grep -q "setupCors" src/server.js; then
+      sed -i '/app.use(cors/i const setupCors = require("./cors-middleware");' src/server.js
+      sed -i '/app.use(cors/a setupCors(app);' src/server.js
+    fi
+
+    echo "Backend CORS fixes applied."
+  })
+
+  echo "GitHub Codespaces CORS fixes completed. You may need to restart your servers."
+}
+
 # Show menu
 show_menu() {
   echo ""
@@ -569,7 +695,7 @@ while true; do
     7) fix_login_component ;;
     8) start_servers ;;
     9) complete_cors_repair ;;
-    10) github_codespaces_fix ;;
+    10) fix_github_codespaces ;;
     0) 
       print_message "Exiting CORS fixer..."
       exit 0

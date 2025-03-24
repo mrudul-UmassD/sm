@@ -218,6 +218,154 @@ function Start-CompleteCorsRepair {
     }
 }
 
+# GitHub Codespaces specific fix
+function Fix-GitHubCodespaces {
+    Write-Host "Applying GitHub Codespaces specific CORS fixes..." -ForegroundColor Cyan
+    
+    # Fix the frontend CORS and CSP issues
+    Push-Location -Path "frontend"
+    try {
+        # Update the index.html to remove any existing CSP meta tags and add a permissive one
+        $indexHtml = Get-Content -Path "public\index.html" -Raw
+        $indexHtml = $indexHtml -replace '<meta http-equiv="Content-Security-Policy".*?>', ''
+        
+        $cspTag = '<meta http-equiv="Content-Security-Policy" content="default-src * self blob: data: gap:; style-src * self ''unsafe-inline'' blob: data: gap:; script-src * ''unsafe-eval'' ''unsafe-inline'' blob: data: gap:; object-src * ''unsafe-inline'' blob: data: gap:; img-src * self ''unsafe-inline'' blob: data: gap:; connect-src self * ''unsafe-inline'' blob: data: gap:; frame-src * self blob: data: gap:;">'
+        $indexHtml = $indexHtml -replace '(<head>)', "`$1`n  $cspTag"
+        Set-Content -Path "public\index.html" -Value $indexHtml
+        
+        # Create or update the setupProxy.js file
+        New-Item -Path "src" -ItemType Directory -Force | Out-Null
+        $proxyContent = @"
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+module.exports = function(app) {
+  // Determine the backend URL based on the environment
+  const getBackendUrl = () => {
+    const hostname = process.env.HOSTNAME || '';
+    
+    // Check if running in GitHub Codespaces
+    if (hostname.includes('github.dev') || hostname.includes('app.github.dev')) {
+      // Extract the codespace name from the hostname
+      const codespaceNameMatch = hostname.match(/(.*?)-\d+/);
+      const codespaceName = codespaceNameMatch ? codespaceNameMatch[1] : '';
+      
+      // Construct the backend URL for GitHub Codespaces
+      return `https://\${codespaceName}-5000.app.github.dev`;
+    }
+    
+    // Default to localhost for development
+    return 'http://localhost:5000';
+  };
+
+  const backendUrl = getBackendUrl();
+  console.log(`Proxying API requests to: \${backendUrl}`);
+
+  // Configure proxy for API requests
+  app.use(
+    '/api',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false, // Ignore SSL certificate errors
+      pathRewrite: { '^/api': '/api' },
+      logLevel: 'debug'
+    })
+  );
+
+  // Also proxy debug endpoints
+  app.use(
+    '/debug',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false,
+      logLevel: 'debug'
+    })
+  );
+
+  // Proxy for health check
+  app.use(
+    '/health',
+    createProxyMiddleware({
+      target: backendUrl,
+      changeOrigin: true,
+      secure: false
+    })
+  );
+};
+"@
+        Set-Content -Path "src\setupProxy.js" -Value $proxyContent
+        
+        # Add http-proxy-middleware to package.json if not present
+        $packageJson = Get-Content -Path "package.json" -Raw | ConvertFrom-Json
+        
+        if (-not ($packageJson.devDependencies.PSObject.Properties.Name -contains "http-proxy-middleware")) {
+            $packageJson.devDependencies | Add-Member -Name "http-proxy-middleware" -Value "^2.0.6" -MemberType NoteProperty
+            $packageJson | ConvertTo-Json -Depth 10 | Set-Content -Path "package.json"
+        }
+        
+        Write-Host "Frontend CORS fixes applied." -ForegroundColor Green
+    }
+    finally {
+        Pop-Location
+    }
+    
+    # Fix the backend CORS configuration
+    Push-Location -Path "backend"
+    try {
+        # Ensure CORS_ORIGIN=* in .env
+        if (Test-Path ".env") {
+            $envContent = Get-Content -Path ".env" -Raw
+            if ($envContent -match "CORS_ORIGIN=") {
+                $envContent = $envContent -replace "CORS_ORIGIN=.*", "CORS_ORIGIN=*"
+            }
+            else {
+                $envContent += "`nCORS_ORIGIN=*"
+            }
+            Set-Content -Path ".env" -Value $envContent
+        }
+        else {
+            Set-Content -Path ".env" -Value "CORS_ORIGIN=*"
+        }
+        
+        # Update server.js to include comprehensive CORS handling
+        $corsMiddlewareContent = @"
+const setupCors = (app) => {
+  app.use((req, res, next) => {
+    // Allow all origins for GitHub Codespaces
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+};
+
+module.exports = setupCors;
+"@
+        Set-Content -Path "src\cors-middleware.js" -Value $corsMiddlewareContent
+        
+        # Inject the cors-middleware.js into server.js if not already there
+        $serverJs = Get-Content -Path "src\server.js" -Raw
+        if ($serverJs -notmatch "setupCors") {
+            $serverJs = $serverJs -replace "app.use\(cors\(corsOptions\)\);", "const setupCors = require('./cors-middleware');`napp.use(cors(corsOptions));`nsetupCors(app);"
+            Set-Content -Path "src\server.js" -Value $serverJs
+        }
+        
+        Write-Host "Backend CORS fixes applied." -ForegroundColor Green
+    }
+    finally {
+        Pop-Location
+    }
+    
+    Write-Host "GitHub Codespaces CORS fixes completed. You may need to restart your servers." -ForegroundColor Yellow
+}
+
 # Main menu
 function Show-Menu {
     Write-Host ""
@@ -230,7 +378,8 @@ function Show-Menu {
     Write-Host "4. Fix frontend CORS configuration" -ForegroundColor White
     Write-Host "5. Start servers" -ForegroundColor White
     Write-Host "6. Run complete CORS fix" -ForegroundColor White
-    Write-Host "7. Exit" -ForegroundColor White
+    Write-Host "7. GitHub Codespaces specific fix" -ForegroundColor White
+    Write-Host "8. Exit" -ForegroundColor White
     Write-Host ""
 }
 
@@ -269,7 +418,8 @@ while ($continue) {
         "4" { Fix-FrontendCors }
         "5" { Start-FixedServers }
         "6" { Start-CompleteCorsRepair }
-        "7" { 
+        "7" { Fix-GitHubCodespaces }
+        "8" { 
             Write-ColorMessage "Exiting CORS fixer..." "Cyan"
             $continue = $false 
         }

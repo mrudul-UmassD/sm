@@ -28,6 +28,7 @@ const corsOptions = {
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.warn('CORS request rejected for origin:', origin);
       callback(new Error('CORS policy violation'));
     }
   },
@@ -37,29 +38,6 @@ const corsOptions = {
   exposedHeaders: ['Content-Length', 'X-Timestamp']
 };
 
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    'https://upgraded-barnacle-r44jr96676472p459-3000.app.github.dev',
-    'https://localhost:3000'
-  ];
-  const origin = req.headers.origin;
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
-
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -67,6 +45,23 @@ app.use(express.urlencoded({ extended: true }));
 
 // Special middleware to handle CORS preflight requests
 app.options('*', cors(corsOptions));
+
+// Additional CORS headers for all responses
+app.use((req, res, next) => {
+  // For GitHub Codespaces specific hosts
+  if (req.headers.origin && req.headers.origin.includes('github.dev')) {
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+  }
+  next();
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -78,9 +73,9 @@ app.get('/health', (req, res) => {
 });
 
 // Debug endpoint to check database status
-app.get('/debug/database', async (req, res) => {
+app.get('/api/debug/database', async (req, res) => {
   try {
-    const dbStatus = await sequelize.authenticate();
+    await sequelize.authenticate();
     res.json({
       status: 'ok',
       message: 'Database connection successful',
@@ -96,7 +91,7 @@ app.get('/debug/database', async (req, res) => {
 });
 
 // Debug endpoint to force database initialization
-app.get('/debug/initialize', async (req, res) => {
+app.get('/api/debug/initialize', async (req, res) => {
   try {
     await initializeDatabase();
     res.json({

@@ -251,12 +251,23 @@ If you encounter issues with the application:
 7. **CORS Errors**: May indicate the backend is not running or has configuration issues:
    - Verify the backend server is running
    - Check that CORS is properly configured in `backend/src/server.js`
+   - For GitHub Codespaces, use the CORS utility script:
+     ```bash
+     # Unix/Linux/macOS
+     ./fix-cors.sh --quick
+     
+     # Windows PowerShell
+     .\fix-cors.ps1
+     ```
+   - Select option 10 for "GitHub Codespaces specific fix" which applies the most permissive settings
 
 8. **Advanced Debugging**: For developers, the system provides additional debugging endpoints:
    - `/debug/database` - Check database connection status
    - `/debug/initialize` - Force database initialization with sample data
    - Use `node backend/src/debug.js` to run diagnostic tests directly
 
-## License
-
-This project is licensed under the MIT License. 
+9. **GitHub Codespaces Specific Issues**: If using GitHub Codespaces, try these fixes:
+   - Access the backend URL directly (e.g., https://your-codespace-5000.app.github.dev) in your browser to accept any certificate warnings
+   - Run the fix-database.js script to update CORS settings and create a proxy configuration
+   - Make sure the frontend is using the correct backend URL for API calls
+   - Check browser console for WebSocket or CSP errors and run fix-cors.sh to resolve them

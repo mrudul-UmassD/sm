@@ -29,7 +29,7 @@ import {
 } from '@mui/icons-material';
 
 const Dashboard = () => {
-  const { user } = useContext(AuthContext);
+  const { user, baseUrl } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,100 +47,102 @@ const Dashboard = () => {
       api.enableAuthBypass();
     }
     
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Try to initialize database first if using bypass
-        if (isAuthBypassEnabled) {
-          try {
-            console.log('Attempting to initialize database...');
-            await axios.get('/debug/initialize?bypass=true');
-            console.log('Database initialization successful');
-          } catch (initError) {
-            console.error('Database initialization error:', initError);
-            // Continue anyway, as the main endpoints might still work
-          }
-        }
-
-        let tasksData = [];
-        let projectsData = [];
-
-        // If auth bypass is enabled, or user is a developer/tester, get tasks
-        if (isAuthBypassEnabled || !user || user.role === 'Developer' || user.role === 'Tester') {
-          // Use direct axios calls with the bypass parameter added
-          try {
-            const tasksRes = isAuthBypassEnabled 
-              ? await axios.get('/tasks?bypass=true')
-              : await axios.get(`/tasks/user/${user.user_id}`);
-            
-            tasksData = tasksRes.data || [];
-          } catch (taskError) {
-            console.error('Error fetching tasks:', taskError);
-            // Continue with empty tasks array
-          }
-        } else {
-          // For admin and project manager, get all tasks
-          try {
-            const tasksRes = await axios.get('/tasks');
-            tasksData = tasksRes.data || [];
-          } catch (taskError) {
-            console.error('Error fetching tasks:', taskError);
-            // Continue with empty tasks array
-          }
-        }
-
-        // Get all projects
-        try {
-          const projectsRes = isAuthBypassEnabled
-            ? await axios.get('/projects?bypass=true')
-            : await axios.get('/projects');
-          
-          projectsData = projectsRes.data || [];
-        } catch (projectError) {
-          console.error('Error fetching projects:', projectError);
-          // Continue with empty projects array
-        }
-
-        // Set state with whatever data we were able to fetch
-        setTasks(tasksData);
-        setProjects(projectsData);
-        setLoading(false);
-      } catch (err) {
-        console.error('Dashboard data fetch error:', err);
-        
-        // Set more descriptive error message based on the error
-        let errorMessage = 'Failed to load dashboard data.';
-        
-        if (err.response?.status === 500) {
-          errorMessage = 'Server error: The backend encountered an internal error. Try running database initialization.';
-        } else if (err.response?.status === 401) {
-          errorMessage = 'Authentication error: Not authorized to access this data. Try enabling authentication bypass.';
-        } else if (err.message.includes('Network Error')) {
-          errorMessage = 'Network error: Cannot connect to the backend server. Please make sure it is running.';
-        }
-        
-        setError(errorMessage);
-        setLoading(false);
-        
-        // If there's a server error, try to initialize the database
-        if (err.response?.status === 500 && isAuthBypassEnabled) {
-          try {
-            console.log('Attempting to recover by initializing database...');
-            setError('Server error detected. Attempting to recover by initializing database...');
-            await axios.get('/debug/initialize?bypass=true');
-            setError('Database initialization successful. Please refresh the page.');
-          } catch (initError) {
-            console.error('Recovery failed:', initError);
-            setError('Recovery failed. Please check the server logs.');
-          }
-        }
-      }
-    };
-
     fetchData();
   }, [user]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Try to initialize database first if using bypass
+      const isAuthBypassEnabled = localStorage.getItem('authBypass') === 'true';
+      if (isAuthBypassEnabled) {
+        try {
+          console.log('Attempting to initialize database...');
+          await axios.get('/api/debug/initialize?bypass=true');
+          console.log('Database initialization successful');
+        } catch (initError) {
+          console.error('Database initialization error:', initError);
+          // Continue anyway, as the main endpoints might still work
+        }
+      }
+
+      let tasksData = [];
+      let projectsData = [];
+
+      // If auth bypass is enabled, or user is a developer/tester, get tasks
+      if (isAuthBypassEnabled || !user || user.role === 'Developer' || user.role === 'Tester') {
+        // Use direct axios calls with the bypass parameter added
+        try {
+          const tasksRes = isAuthBypassEnabled 
+            ? await axios.get('/api/tasks?bypass=true')
+            : await axios.get(`/api/tasks/user/${user.user_id}`);
+          
+          tasksData = tasksRes.data || [];
+        } catch (taskError) {
+          console.error('Error fetching tasks:', taskError);
+          // Continue with empty tasks array
+        }
+      } else {
+        // For admin and project manager, get all tasks
+        try {
+          const tasksRes = await axios.get('/api/tasks');
+          tasksData = tasksRes.data || [];
+        } catch (taskError) {
+          console.error('Error fetching tasks:', taskError);
+          // Continue with empty tasks array
+        }
+      }
+
+      // Get all projects
+      try {
+        const projectsRes = isAuthBypassEnabled
+          ? await axios.get('/api/projects?bypass=true')
+          : await axios.get('/api/projects');
+        
+        projectsData = projectsRes.data || [];
+      } catch (projectError) {
+        console.error('Error fetching projects:', projectError);
+        // Continue with empty projects array
+      }
+
+      // Set state with whatever data we were able to fetch
+      setTasks(tasksData);
+      setProjects(projectsData);
+      setLoading(false);
+    } catch (err) {
+      console.error('Dashboard data fetch error:', err);
+      
+      // Set more descriptive error message based on the error
+      let errorMessage = 'Failed to load dashboard data.';
+      
+      if (err.response?.status === 500) {
+        errorMessage = 'Server error: The backend encountered an internal error. Try running database initialization.';
+      } else if (err.response?.status === 401) {
+        errorMessage = 'Authentication error: Not authorized to access this data. Try enabling authentication bypass.';
+      } else if (err.message.includes('Network Error')) {
+        errorMessage = 'Network error: Cannot connect to the backend server. Please make sure it is running.';
+      }
+      
+      setError(errorMessage);
+      setLoading(false);
+      
+      // If there's a server error, try to initialize the database
+      const isAuthBypassEnabled = localStorage.getItem('authBypass') === 'true';
+      if (err.response?.status === 500 && isAuthBypassEnabled) {
+        try {
+          console.log('Attempting to recover by initializing database...');
+          setError('Server error detected. Attempting to recover by initializing database...');
+          await axios.get('/api/debug/initialize?bypass=true');
+          setError('Database initialization successful. Please refresh the page.');
+        } catch (initError) {
+          console.error('Recovery failed:', initError);
+          setError('Recovery failed. Please check the server logs.');
+        }
+      }
+    }
+  };
 
   // Get status color for task chips
   const getStatusColor = (status) => {
@@ -179,6 +181,31 @@ const Dashboard = () => {
         return 'error';
       default:
         return 'default';
+    }
+  };
+
+  // Function to initialize the database
+  const initializeDatabase = async () => {
+    setLoading(true);
+    try {
+      // Check if auth bypass is enabled
+      const bypassParam = localStorage.getItem('authBypass') === 'true' ? '?bypass=true' : '';
+      
+      // Call the API endpoint to initialize the database
+      const response = await axios.get(`${baseUrl}/debug/initialize${bypassParam}`);
+      
+      if (response.data.status === 'ok') {
+        setError(null);
+        // Fetch data again after initialization
+        await fetchData();
+      } else {
+        setError('Database initialization failed: ' + response.data.message);
+      }
+    } catch (error) {
+      console.error('Database initialization error:', error);
+      setError(`Database initialization error: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -226,7 +253,7 @@ const Dashboard = () => {
               sx={{ ml: 2 }} 
               onClick={async () => {
                 try {
-                  await axios.get('/debug/initialize?bypass=true');
+                  await axios.get('/api/debug/initialize?bypass=true');
                   setError('Database initialized successfully. Please refresh the page.');
                 } catch (err) {
                   setError('Failed to initialize database. Please check server logs.');
