@@ -46,7 +46,8 @@ const login = async (req, res) => {
   }
 };
 
-// Register controller
+// Register controller - commented out as per requirements
+/* 
 const register = async (req, res) => {
   try {
     const { name, email, password, role, team, level } = req.body;
@@ -87,8 +88,10 @@ const register = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+*/
 
-// Get current user profile
+// Get current user profile - commented out as per requirements
+/*
 const getProfile = async (req, res) => {
   try {
     res.status(200).json({
@@ -104,8 +107,10 @@ const getProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+*/
 
-// Change password
+// Change password - commented out as per requirements
+/*
 const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -129,10 +134,12 @@ const changePassword = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+*/
 
 module.exports = {
   login,
-  register,
-  getProfile,
-  changePassword,
+  // Commented out methods but still exporting them to maintain API compatibility
+  register: (req, res) => res.status(403).json({ message: 'Registration is disabled' }),
+  getProfile: (req, res) => res.status(403).json({ message: 'Profile access is disabled' }),
+  changePassword: (req, res) => res.status(403).json({ message: 'Password change is disabled' }),
 }; 

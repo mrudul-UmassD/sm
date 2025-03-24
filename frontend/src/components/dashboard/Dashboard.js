@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api';
 import {
   Box,
   Grid,
@@ -33,32 +34,108 @@ const Dashboard = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [bypassActive, setBypassActive] = useState(false);
 
   useEffect(() => {
+    // Check if auth bypass is enabled
+    const isAuthBypassEnabled = localStorage.getItem('authBypass') === 'true';
+    if (isAuthBypassEnabled) {
+      setBypassActive(true);
+      console.log('AUTH BYPASS: Bypass is active in Dashboard');
+      
+      // Ensure the api service has bypass enabled
+      api.enableAuthBypass();
+    }
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // If user is a developer or tester, get their assigned tasks
-        if (user.role === 'Developer' || user.role === 'Tester') {
-          const tasksRes = await axios.get(`/tasks/user/${user.user_id}`);
-          setTasks(tasksRes.data);
+        // Try to initialize database first if using bypass
+        if (isAuthBypassEnabled) {
+          try {
+            console.log('Attempting to initialize database...');
+            await axios.get('/debug/initialize?bypass=true');
+            console.log('Database initialization successful');
+          } catch (initError) {
+            console.error('Database initialization error:', initError);
+            // Continue anyway, as the main endpoints might still work
+          }
+        }
+
+        let tasksData = [];
+        let projectsData = [];
+
+        // If auth bypass is enabled, or user is a developer/tester, get tasks
+        if (isAuthBypassEnabled || !user || user.role === 'Developer' || user.role === 'Tester') {
+          // Use direct axios calls with the bypass parameter added
+          try {
+            const tasksRes = isAuthBypassEnabled 
+              ? await axios.get('/tasks?bypass=true')
+              : await axios.get(`/tasks/user/${user.user_id}`);
+            
+            tasksData = tasksRes.data || [];
+          } catch (taskError) {
+            console.error('Error fetching tasks:', taskError);
+            // Continue with empty tasks array
+          }
         } else {
           // For admin and project manager, get all tasks
-          const tasksRes = await axios.get('/tasks');
-          setTasks(tasksRes.data);
+          try {
+            const tasksRes = await axios.get('/tasks');
+            tasksData = tasksRes.data || [];
+          } catch (taskError) {
+            console.error('Error fetching tasks:', taskError);
+            // Continue with empty tasks array
+          }
         }
 
         // Get all projects
-        const projectsRes = await axios.get('/projects');
-        setProjects(projectsRes.data);
+        try {
+          const projectsRes = isAuthBypassEnabled
+            ? await axios.get('/projects?bypass=true')
+            : await axios.get('/projects');
+          
+          projectsData = projectsRes.data || [];
+        } catch (projectError) {
+          console.error('Error fetching projects:', projectError);
+          // Continue with empty projects array
+        }
 
+        // Set state with whatever data we were able to fetch
+        setTasks(tasksData);
+        setProjects(projectsData);
         setLoading(false);
       } catch (err) {
         console.error('Dashboard data fetch error:', err);
-        setError('Failed to load dashboard data. Please try again.');
+        
+        // Set more descriptive error message based on the error
+        let errorMessage = 'Failed to load dashboard data.';
+        
+        if (err.response?.status === 500) {
+          errorMessage = 'Server error: The backend encountered an internal error. Try running database initialization.';
+        } else if (err.response?.status === 401) {
+          errorMessage = 'Authentication error: Not authorized to access this data. Try enabling authentication bypass.';
+        } else if (err.message.includes('Network Error')) {
+          errorMessage = 'Network error: Cannot connect to the backend server. Please make sure it is running.';
+        }
+        
+        setError(errorMessage);
         setLoading(false);
+        
+        // If there's a server error, try to initialize the database
+        if (err.response?.status === 500 && isAuthBypassEnabled) {
+          try {
+            console.log('Attempting to recover by initializing database...');
+            setError('Server error detected. Attempting to recover by initializing database...');
+            await axios.get('/debug/initialize?bypass=true');
+            setError('Database initialization successful. Please refresh the page.');
+          } catch (initError) {
+            console.error('Recovery failed:', initError);
+            setError('Recovery failed. Please check the server logs.');
+          }
+        }
       }
     };
 
@@ -119,12 +196,46 @@ const Dashboard = () => {
         Dashboard
       </Typography>
       <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-        Welcome back, {user.name}!
+        Welcome back, {user?.name || 'User'}!
       </Typography>
+
+      {bypassActive && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Authentication bypass is active. You have admin access without login.
+          <Button 
+            size="small" 
+            sx={{ ml: 2 }} 
+            variant="outlined"
+            onClick={() => {
+              localStorage.removeItem('authBypass');
+              window.location.href = '/login';
+            }}
+          >
+            Disable Bypass
+          </Button>
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
+          {error.includes('Server error') && (
+            <Button 
+              size="small" 
+              color="inherit" 
+              sx={{ ml: 2 }} 
+              onClick={async () => {
+                try {
+                  await axios.get('/debug/initialize?bypass=true');
+                  setError('Database initialized successfully. Please refresh the page.');
+                } catch (err) {
+                  setError('Failed to initialize database. Please check server logs.');
+                }
+              }}
+            >
+              Initialize Database
+            </Button>
+          )}
         </Alert>
       )}
 
@@ -138,7 +249,7 @@ const Dashboard = () => {
                 My Tasks
               </Typography>
               
-              {(user.role === 'Admin' || user.role === 'Project Manager') && (
+              {(bypassActive || (user && (user.role === 'Admin' || user.role === 'Project Manager'))) && (
                 <Button 
                   variant="contained" 
                   size="small" 
@@ -210,7 +321,7 @@ const Dashboard = () => {
                 Projects Overview
               </Typography>
               
-              {(user.role === 'Admin' || user.role === 'Project Manager') && (
+              {(bypassActive || (user && (user.role === 'Admin' || user.role === 'Project Manager'))) && (
                 <Button 
                   variant="contained" 
                   size="small" 
@@ -263,24 +374,47 @@ const Dashboard = () => {
             )}
           </Paper>
         </Grid>
-
-        {/* AI Recommendations for Admin and Project Manager */}
-        {(user.role === 'Admin' || user.role === 'Project Manager') && (
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                AI Task Recommendations
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Our AI suggests the following task assignments based on team members' skills, current workload, and past performance:
-              </Typography>
-              <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                This is a placeholder for AI recommendations. In a real implementation, this would show AI-generated task assignments based on performance data.
-              </Typography>
-            </Paper>
-          </Grid>
-        )}
+                
+        {/* Status Overview */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Task Status Overview
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <Grid container spacing={2}>
+              <Grid item xs={6} sm={3}>
+                <Paper elevation={0} sx={{ p: 2, textAlign: 'center', bgcolor: 'grey.100' }}>
+                  <Badge badgeContent={tasks.filter(t => t.status === 'In Progress').length} color="primary">
+                    <Typography variant="subtitle1">In Progress</Typography>
+                  </Badge>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper elevation={0} sx={{ p: 2, textAlign: 'center', bgcolor: 'grey.100' }}>
+                  <Badge badgeContent={tasks.filter(t => t.status === 'Submitted' || t.status === 'Under Review').length} color="warning">
+                    <Typography variant="subtitle1">Under Review</Typography>
+                  </Badge>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper elevation={0} sx={{ p: 2, textAlign: 'center', bgcolor: 'grey.100' }}>
+                  <Badge badgeContent={tasks.filter(t => t.status === 'Approved').length} color="success">
+                    <Typography variant="subtitle1">Approved</Typography>
+                  </Badge>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper elevation={0} sx={{ p: 2, textAlign: 'center', bgcolor: 'grey.100' }}>
+                  <Badge badgeContent={tasks.filter(t => t.status === 'Rejected' || t.status === 'Rework').length} color="error">
+                    <Typography variant="subtitle1">Rejected/Rework</Typography>
+                  </Badge>
+                </Paper>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Grid>
       </Grid>
     </Box>
   );

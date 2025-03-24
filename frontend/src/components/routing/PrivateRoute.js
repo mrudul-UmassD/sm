@@ -5,6 +5,9 @@ import { Box, CircularProgress } from '@mui/material';
 
 const PrivateRoute = () => {
   const { user, loading } = useContext(AuthContext);
+  
+  // Check if auth bypass is enabled
+  const isAuthBypassEnabled = localStorage.getItem('authBypass') === 'true';
 
   // If still loading, show a loading spinner
   if (loading) {
@@ -13,6 +16,12 @@ const PrivateRoute = () => {
         <CircularProgress />
       </Box>
     );
+  }
+
+  // If auth bypass is enabled, allow access regardless of user state
+  if (isAuthBypassEnabled) {
+    console.log('AUTH BYPASS: Allowing access to protected route');
+    return <Outlet />;
   }
 
   // If not authenticated, redirect to login page

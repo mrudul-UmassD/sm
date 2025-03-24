@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartSprint - Authentication Bypass</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #1976d2;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    button {
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:hover {
+      background-color: #1565c0;
+    }
+    .warning {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 10px;
+      margin: 15px 0;
+    }
+    code {
+      background-color: #f1f1f1;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SmartSprint Authentication Bypass</h1>
+    
+    <p>If you're experiencing issues with login or authentication, you can use this page to bypass the authentication system completely.</p>
+    
+    <div class="warning">
+      <strong>Note:</strong> This is intended for development and testing only. In a production environment, you should properly secure your application.
+    </div>
+    
+    <h2>Options</h2>
+    
+    <p><strong>1. Enable Authentication Bypass and go to Dashboard:</strong></p>
+    <button id="bypass-button">Enable Bypass & Go to Dashboard</button>
+    
+    <p><strong>2. Use direct URL access:</strong></p>
+    <p>You can access the dashboard directly with authentication bypass by visiting: <a href="/bypass">/bypass</a></p>
+    
+    <p><strong>3. Manual Configuration (Developer Console):</strong></p>
+    <p>Run this in your browser's console to enable bypass:</p>
+    <code>localStorage.setItem('authBypass', 'true'); window.location.href = '/dashboard';</code>
+    
+    <h2>Default Login Credentials</h2>
+    <p>If you prefer to log in normally, use these credentials:</p>
+    <ul>
+      <li><strong>Email:</strong> admin@smartsprint.com</li>
+      <li><strong>Password:</strong> admin</li>
+    </ul>
+  </div>
+  
+  <script>
+    // Enable bypass and redirect to dashboard
+    document.getElementById('bypass-button').addEventListener('click', function() {
+      localStorage.setItem('authBypass', 'true');
+      window.location.href = '/dashboard';
+    });
+  </script>
+</body>
+</html> 

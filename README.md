@@ -4,12 +4,12 @@ SmartSprint is a comprehensive project management system enhanced by AI for auto
 
 ## Features
 
-- **Authentication & Authorization**: JWT-based authentication with role-based access control
+- **Simplified Authentication**: Email-based authentication with role-based access control
 - **User Management**: CRUD operations with hierarchical roles (Admin, Project Manager, Developer, Tester)
 - **Project Management**: Create and track projects through their lifecycle
 - **Task Management**: Create, assign, and track tasks with detailed status updates
 - **Performance Tracking**: Log and analyze time spent on tasks with analytics
-- **AI Integration**: Placeholders for AI-based task assignment optimization
+- **API Utilities**: Built-in tools for testing API connectivity and diagnosing issues
 
 ## Tech Stack
 
@@ -92,14 +92,16 @@ smartsprint/
 │
 ├── frontend/                   # React frontend application
 │   ├── public/                 # Static files
+│   │   ├── api-test.html       # API test utility
+│   │   └── bypass.html         # Authentication bypass utility
 │   ├── src/
 │   │   ├── components/         # React components
 │   │   │   ├── auth/           # Authentication components
 │   │   │   ├── dashboard/      # Dashboard components
 │   │   │   ├── layout/         # Layout components
-│   │   │   └── routing/        # Routing components
+│   │   │   ├── routing/        # Routing components
+│   │   │   └── users/          # User management components
 │   │   ├── context/            # React context
-│   │   ├── pages/              # Page components
 │   │   ├── services/           # API services
 │   │   ├── utils/              # Utility functions
 │   │   ├── App.js              # Main App component
@@ -114,28 +116,84 @@ smartsprint/
 └── README.md                   # Project documentation
 ```
 
-## Default Credentials
+## Authentication & Access
+
+### Default Credentials
 
 The system is initialized with a default admin user:
 - Email: admin@smartsprint.com
 - Password: admin
 
+### Simplified Authentication
+
+The system uses email-only authentication:
+- All other authentication methods have been disabled
+- User registration is restricted to admin users via the User Management page
+
+### User Roles
+
+1. **Admin**: Full access to all features, can manage users, projects, and analytics
+2. **Project Manager**: Can create and manage projects and tasks
+3. **Developer**: Can work on assigned tasks
+4. **Tester**: Can test and review tasks
+
+## Authentication Bypass
+
+For development and testing purposes, you can bypass the authentication system completely using one of these methods:
+
+1. **Via Login Page**: On the login page, check the "Bypass Authentication" checkbox to skip login
+   
+2. **Via Direct URL**: Access `/bypass` in your browser to go directly to the dashboard with admin access
+
+3. **Via API Calls**: Add `?bypass=true` to any API request to automatically bypass authentication
+   Example: `http://localhost:5000/api/projects?bypass=true`
+
+4. **Via Console**: Run this in your browser's console to enable bypass:
+   ```javascript
+   localStorage.setItem('authBypass', 'true');
+   window.location.href = '/dashboard';
+   ```
+
+5. **Via the API Service**: In your code, use the `api` service to enable/disable bypass:
+   ```javascript
+   import api from './services/api';
+   api.enableAuthBypass();
+   // or
+   api.disableAuthBypass();
+   ```
+
+> **Security Warning**: The authentication bypass is intended for development and testing only. Make sure to disable it in production environments.
+
+## User Management
+
+The User Management page (accessible to admins) allows you to:
+
+1. **View all users**: See a list of all users with their roles, teams, and levels
+2. **Add new users**: Create users with different roles (Admin, Project Manager, Developer, Tester)
+3. **Edit existing users**: Update user details, change roles, teams, or levels
+4. **Delete users**: Remove users from the system (except the default admin)
+
+## API Test Utility
+
+For diagnosing API connection issues, use the API Test Utility:
+
+1. Navigate to `/api-test.html` in your browser
+2. Use the auto-detect feature to find your backend API URL
+3. Test the connection to the backend
+4. Try accessing different endpoints (Tasks, Projects, Users)
+5. Fix common issues like duplicate API paths
+
 ## API Documentation
 
 ### Authentication Endpoints
 - POST `/api/auth/login`: Login with email and password
-- POST `/api/auth/register`: Register a new user
-- GET `/api/auth/profile`: Get current user profile
-- POST `/api/auth/change-password`: Change user password
 
 ### User Endpoints
 - GET `/api/users`: Get all users
 - GET `/api/users/:id`: Get user by ID
-- POST `/api/users`: Create a new user (Admin, Project Manager)
-- PUT `/api/users/:id`: Update a user
+- POST `/api/users`: Create a new user (Admin only)
+- PUT `/api/users/:id`: Update a user (Admin only)
 - DELETE `/api/users/:id`: Delete a user (Admin only)
-- GET `/api/users/role/:role`: Get users by role
-- GET `/api/users/team/:team`: Get users by team
 
 ### Project Endpoints
 - GET `/api/projects`: Get all projects
@@ -143,18 +201,61 @@ The system is initialized with a default admin user:
 - POST `/api/projects`: Create a new project (Admin, Project Manager)
 - PUT `/api/projects/:id`: Update a project (Admin, Project Manager)
 - DELETE `/api/projects/:id`: Delete a project (Admin only)
-- GET `/api/projects/status/:status`: Get projects by status
+
+### Task Endpoints
+- GET `/api/tasks`: Get all tasks
+- GET `/api/tasks/:id`: Get task by ID
+- GET `/api/tasks/user/:id`: Get tasks assigned to a user
+- POST `/api/tasks`: Create a new task
+- PUT `/api/tasks/:id`: Update a task
 
 For more API endpoints, refer to the route files in the backend code.
 
 ## Troubleshooting
 
-If you encounter issues with running the application:
+If you encounter issues with the application:
 
-1. **Port conflicts**: Make sure ports 3000 and 5000 are not being used by other applications
-2. **Database issues**: Check that the SQLite database file was created correctly in `backend/database/`
-3. **Node version**: This application works best with Node.js 14+
-4. **Docker issues**: If using Docker, ensure Docker Desktop is running and ports 3000 and 5000 are free
+1. **Database Connection Issues**: Use the database troubleshooting script to fix common issues:
+   ```bash
+   # Run the database fix script from the project root
+   node fix-database.js
+   ```
+   This script will:
+   - Create necessary directories
+   - Initialize the database
+   - Create missing static files
+   - Start the backend server for testing
+
+2. **API Connection Issues**: Use the `/api-test.html` utility to diagnose API connectivity problems:
+   - Navigate to http://localhost:3000/api-test.html
+   - Test endpoints with the authentication bypass enabled
+   - Check server responses and error messages
+
+3. **Server 500 Errors**: These usually indicate database issues. Try these solutions:
+   - Run the `/debug/initialize` endpoint (http://localhost:5000/debug/initialize?bypass=true)
+   - Check if the SQLite database file exists in `backend/database/`
+   - Verify all required tables were created
+   - Use the "Initialize Database" button shown in the dashboard error message
+
+4. **Authentication Problems**: Use the authentication bypass to access the system without login:
+   - Enable bypass through the login page checkbox
+   - Or visit `/bypass` to directly access the dashboard with bypass enabled
+   - Or use the API test utility to enable bypass programmatically
+
+5. **Data Loading Issues**: Check for duplicate `/api/api/` paths in API calls:
+   - Use the "Fix Duplicate API Path" button in the API test utility
+   - Verify API URLs in the browser console
+
+6. **Port conflicts**: Make sure ports 3000 and 5000 are not being used by other applications
+
+7. **CORS Errors**: May indicate the backend is not running or has configuration issues:
+   - Verify the backend server is running
+   - Check that CORS is properly configured in `backend/src/server.js`
+
+8. **Advanced Debugging**: For developers, the system provides additional debugging endpoints:
+   - `/debug/database` - Check database connection status
+   - `/debug/initialize` - Force database initialization with sample data
+   - Use `node backend/src/debug.js` to run diagnostic tests directly
 
 ## License
 

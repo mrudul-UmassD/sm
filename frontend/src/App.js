@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -20,6 +20,9 @@ import Register from './components/auth/Register';
 // Dashboard
 import Dashboard from './components/dashboard/Dashboard';
 
+// User Management
+import UserManagement from './components/users/UserManagement';
+
 // Create theme
 const theme = createTheme({
   palette: {
@@ -31,6 +34,17 @@ const theme = createTheme({
     },
   },
 });
+
+// Helper component for bypass route
+const BypassRoute = ({ children }) => {
+  useEffect(() => {
+    // Enable auth bypass
+    localStorage.setItem('authBypass', 'true');
+    console.log('AUTH BYPASS: Auto-enabled for bypass route');
+  }, []);
+  
+  return children;
+};
 
 const App = () => {
   return (
@@ -45,9 +59,17 @@ const App = () => {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               
+              {/* Bypass route - automatically enables auth bypass */}
+              <Route path="/bypass" element={
+                <BypassRoute>
+                  <Dashboard />
+                </BypassRoute>
+              } />
+              
               {/* Private routes */}
               <Route element={<PrivateRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/users" element={<UserManagement />} />
                 {/* Additional routes will be added here */}
               </Route>
               

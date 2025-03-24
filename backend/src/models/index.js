@@ -1,34 +1,30 @@
+const { sequelize } = require('../config/db');
 const User = require('./User');
 const Project = require('./Project');
 const Task = require('./Task');
 const Comment = require('./Comment');
 const PerformanceLog = require('./PerformanceLog');
-const { sequelize } = require('../config/db');
 
 // Define associations
 // Project - Task associations (one-to-many)
 Project.hasMany(Task, { foreignKey: 'project_id' });
 Task.belongsTo(Project, { foreignKey: 'project_id' });
 
-// User - Task associations (one-to-many)
-User.hasMany(Task, { foreignKey: 'assigned_to', as: 'AssignedTasks' });
-Task.belongsTo(User, { foreignKey: 'assigned_to', as: 'Assignee' });
-
-// User - Comment associations (one-to-many)
-User.hasMany(Comment, { foreignKey: 'user_id' });
-Comment.belongsTo(User, { foreignKey: 'user_id' });
-
 // Task - Comment associations (one-to-many)
 Task.hasMany(Comment, { foreignKey: 'task_id' });
 Comment.belongsTo(Task, { foreignKey: 'task_id' });
 
-// User - PerformanceLog associations (one-to-many)
+// User - Task associations (assigned to)
+User.hasMany(Task, { foreignKey: 'assigned_to' });
+Task.belongsTo(User, { as: 'assignee', foreignKey: 'assigned_to' });
+
+// User - Performance Log associations (one-to-many)
 User.hasMany(PerformanceLog, { foreignKey: 'user_id' });
 PerformanceLog.belongsTo(User, { foreignKey: 'user_id' });
 
-// Task - PerformanceLog associations (one-to-many)
-Task.hasMany(PerformanceLog, { foreignKey: 'task_id' });
-PerformanceLog.belongsTo(Task, { foreignKey: 'task_id' });
+// User - Comment associations (one-to-many)
+User.hasMany(Comment, { foreignKey: 'user_id' });
+Comment.belongsTo(User, { foreignKey: 'user_id' });
 
 // Sync all models with the database
 const syncDatabase = async () => {
@@ -61,5 +57,6 @@ module.exports = {
   Task,
   Comment,
   PerformanceLog,
+  sequelize,
   syncDatabase,
 }; 

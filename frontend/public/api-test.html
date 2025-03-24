@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartSprint - API Test Utility</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #1976d2;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    button {
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:hover {
+      background-color: #1565c0;
+    }
+    .warning {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 10px;
+      margin: 15px 0;
+    }
+    pre {
+      background-color: #f1f1f1;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin: 8px 0;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .panel {
+      margin-top: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+    }
+    .panel h3 {
+      margin-top: 0;
+    }
+    .success {
+      color: #4caf50;
+    }
+    .error {
+      color: #f44336;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SmartSprint API Test Utility</h1>
+    
+    <div class="warning">
+      <strong>Note:</strong> This tool is for development and testing only, to help diagnose API connectivity issues.
+    </div>
+    
+    <div class="panel">
+      <h3>API Connection Test</h3>
+      <p>Test the connection to your backend API</p>
+      
+      <label for="apiHost">API Host (include https:// and port):</label>
+      <input type="text" id="apiHost" value="">
+      
+      <button id="detect-api">Auto-Detect API URL</button>
+      <button id="test-connection">Test Connection</button>
+      
+      <div id="connection-result" style="margin-top: 15px;"></div>
+    </div>
+    
+    <div class="panel">
+      <h3>Test API Endpoint</h3>
+      
+      <label for="endpoint">Endpoint:</label>
+      <select id="endpoint">
+        <option value="/tasks">Tasks List</option>
+        <option value="/projects">Projects List</option>
+        <option value="/users">Users List</option>
+        <option value="/auth/profile">User Profile</option>
+      </select>
+      
+      <label for="method">Method:</label>
+      <select id="method">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+      </select>
+      
+      <label>Authentication:</label>
+      <div>
+        <input type="checkbox" id="useBypass" checked>
+        <label for="useBypass">Bypass Authentication (add ?bypass=true)</label>
+      </div>
+      
+      <button id="send-request">Send Request</button>
+      
+      <div id="request-result" style="margin-top: 15px;">
+        <h4>Response:</h4>
+        <pre id="response-data"></pre>
+      </div>
+    </div>
+    
+    <div class="panel">
+      <h3>Fix Common Issues</h3>
+      
+      <button id="fix-duplicate">Fix Duplicate API Path</button>
+      <p>If you're seeing errors with <code>/api/api/</code> in URLs, this will update localStorage settings to fix it.</p>
+      
+      <button id="enable-bypass">Enable Auth Bypass</button>
+      <p>Enable authentication bypass so you can access the application without logging in.</p>
+      
+      <button id="go-to-dashboard">Go to Dashboard with Bypass</button>
+      <p>Go directly to the dashboard with auth bypass enabled.</p>
+    </div>
+  </div>
+  
+  <script>
+    // Helpers
+    function showResult(elementId, message, isError = false) {
+      const el = document.getElementById(elementId);
+      el.innerHTML = message;
+      el.className = isError ? 'error' : 'success';
+    }
+    
+    function detectApiUrl() {
+      const hostname = window.location.hostname;
+      let apiUrl = '';
+      
+      // Check if running in GitHub Codespaces
+      if (hostname.includes('github.dev') || hostname.includes('app.github.dev')) {
+        const codespaceNameMatch = hostname.match(/(.*?)-\d+\.app\.github\.dev/);
+        const codespaceName = codespaceNameMatch ? codespaceNameMatch[1] : '';
+        
+        // Construct the backend URL for GitHub Codespaces
+        apiUrl = `https://${codespaceName}-5000.app.github.dev`;
+      } else {
+        // Development environment
+        apiUrl = 'http://localhost:5000';
+      }
+      
+      document.getElementById('apiHost').value = apiUrl;
+      return apiUrl;
+    }
+    
+    // Auto-detect API URL
+    document.getElementById('detect-api').addEventListener('click', detectApiUrl);
+    
+    // Test connection
+    document.getElementById('test-connection').addEventListener('click', async function() {
+      const apiHost = document.getElementById('apiHost').value;
+      
+      if (!apiHost) {
+        showResult('connection-result', 'Please enter an API host', true);
+        return;
+      }
+      
+      try {
+        showResult('connection-result', 'Testing connection...');
+        
+        const response = await fetch(`${apiHost}/health?bypass=true`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          showResult('connection-result', `✅ Connection successful! Server status: ${data.status || 'OK'}`);
+        } else {
+          showResult('connection-result', `❌ Server responded with status: ${response.status} ${response.statusText}`, true);
+        }
+      } catch (error) {
+        console.error('Connection test error:', error);
+        showResult('connection-result', `❌ Connection failed: ${error.message}`, true);
+        
+        // Check for CORS error
+        if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
+          showResult('connection-result', 
+            `❌ CORS error detected. This might be due to:
+            <ul>
+              <li>Backend server is not running</li>
+              <li>CORS is not configured properly on the backend</li>
+              <li>The API URL is incorrect</li>
+            </ul>
+            Try opening <a href="${apiHost}" target="_blank">${apiHost}</a> directly to accept any self-signed certificates.`, 
+            true
+          );
+        }
+      }
+    });
+    
+    // Send API request
+    document.getElementById('send-request').addEventListener('click', async function() {
+      const apiHost = document.getElementById('apiHost').value || detectApiUrl();
+      const endpoint = document.getElementById('endpoint').value;
+      const method = document.getElementById('method').value;
+      const useBypass = document.getElementById('useBypass').checked;
+      
+      const url = `${apiHost}${endpoint}${useBypass ? '?bypass=true' : ''}`;
+      const responseEl = document.getElementById('response-data');
+      
+      try {
+        responseEl.textContent = 'Loading...';
+        
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        responseEl.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        console.error('API request error:', error);
+        responseEl.textContent = `Error: ${error.message}`;
+      }
+    });
+    
+    // Fix duplicate API path
+    document.getElementById('fix-duplicate').addEventListener('click', function() {
+      // Check if there's a custom baseURL in localStorage that might have the duplicate
+      const baseUrl = localStorage.getItem('apiBaseUrl');
+      
+      if (baseUrl && baseUrl.includes('/api/api/')) {
+        // Fix the duplicate
+        const fixedUrl = baseUrl.replace('/api/api/', '/api/');
+        localStorage.setItem('apiBaseUrl', fixedUrl);
+        alert(`Fixed the duplicate API path in localStorage. Old value: ${baseUrl}, New value: ${fixedUrl}`);
+      } else {
+        alert('No duplicate API path found in localStorage. If you\'re still seeing issues, check your code for hardcoded URLs.');
+      }
+    });
+    
+    // Enable auth bypass
+    document.getElementById('enable-bypass').addEventListener('click', function() {
+      localStorage.setItem('authBypass', 'true');
+      alert('Authentication bypass enabled. You can now access protected routes without logging in.');
+    });
+    
+    // Go to dashboard with bypass
+    document.getElementById('go-to-dashboard').addEventListener('click', function() {
+      localStorage.setItem('authBypass', 'true');
+      window.location.href = '/dashboard';
+    });
+    
+    // Initialize the UI
+    window.onload = function() {
+      detectApiUrl();
+    };
+  </script>
+</body>
+</html> 
