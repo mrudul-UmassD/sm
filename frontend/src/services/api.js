@@ -13,6 +13,11 @@ const determineBaseUrl = () => {
   let baseUrl = '';
   
   // Check if running in GitHub Codespaces
+
+  const API_URL = window.location.hostname.includes('github.dev') 
+  ? `https://${window.location.hostname.replace('-3000', '-5000')}/api`
+  : 'http://localhost:5000/api';
+
   if (hostname.includes('github.dev') || hostname.includes('app.github.dev')) {
     // Extract the codespace name from the hostname
     const codespaceNameMatch = hostname.match(/(.*?)-\d+\.app\.github\.dev/);

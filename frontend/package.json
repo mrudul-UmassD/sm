@@ -2,6 +2,7 @@
   "name": "smartsprint-frontend",
   "version": "1.0.0",
   "description": "Frontend for the SmartSprint project management system",
+  "proxy": "https://upgraded-barnacle-r44jr96676472p459-5000.app.github.dev",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.0",
