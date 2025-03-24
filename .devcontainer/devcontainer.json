@@ -1,0 +1,32 @@
+{
+  "name": "SmartSprint Project",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:16",
+  "forwardPorts": [3000, 5000],
+  "postCreateCommand": "bash ./.github/codespace-postCreate.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vsliveshare.vsliveshare",
+        "GitHub.copilot"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": true
+        }
+      }
+    }
+  },
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend",
+      "onAutoForward": "openPreview"
+    },
+    "5000": {
+      "label": "Backend API"
+    }
+  },
+  "remoteUser": "node"
+} 
